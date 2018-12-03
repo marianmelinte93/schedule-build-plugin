@@ -2,6 +2,8 @@ package org.jenkinsci.plugins.schedulebuild;
 
 import java.text.DateFormat;
 import java.text.ParseException;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.TimeZone;
 
@@ -24,6 +26,7 @@ public class ScheduleBuildGlobalConfiguration extends GlobalConfiguration {
     public ScheduleBuildGlobalConfiguration() {
         this.defaultScheduleTime = new Date(0, 0, 0, 22, 0);
         this.timeZone = TimeZone.getDefault().getID();
+        ZoneId.systemDefault().getId();
         load();
     }
 
@@ -63,9 +66,9 @@ public class ScheduleBuildGlobalConfiguration extends GlobalConfiguration {
 
     public FormValidation doCheckTimeZone(@QueryParameter String value) {
         TimeZone zone = TimeZone.getTimeZone(value);
-        if(StringUtils.equals(zone.getID(), value)) {
+        if (StringUtils.equals(zone.getID(), value)) {
             return FormValidation.ok();
-        }else {
+        } else {
             return FormValidation.error(Messages.ScheduleBuildGlobalConfiguration_TimeZoneError());
         }
     }

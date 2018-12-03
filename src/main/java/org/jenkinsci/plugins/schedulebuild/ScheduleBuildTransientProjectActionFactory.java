@@ -12,14 +12,12 @@ import jenkins.model.TransientActionFactory;
 public final class ScheduleBuildTransientProjectActionFactory extends TransientActionFactory<Job> {
 
     @Override
-    public Class<Job> type()
-    {
+    public Class<Job> type() {
         return Job.class;
     }
 
     @Override
-    public Collection<? extends Action> createFor(Job target)
-    {
+    public Collection<? extends Action> createFor(Job target) {
         return Collections.singleton(new ScheduleBuildAction(target));
     }
 }
