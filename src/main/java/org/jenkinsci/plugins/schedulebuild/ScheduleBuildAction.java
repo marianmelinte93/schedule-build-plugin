@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.util.Date;
+import java.util.TimeZone;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -84,20 +85,20 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
     }
 
     public Date getDefaultDateObject() {
-        Date buildtime = new Date(), now = new Date(), defaultScheduleTime = new ScheduleBuildGlobalConfiguration().getDefaultScheduleTimeObject();
+        Date buildtime = new Date(), now = new Date(), defaultScheduleTime = new Date();
         DateFormat dateFormat = dateFormat();
         try {
             now = dateFormat.parse(dateFormat.format(now));
         } catch (ParseException e) {
             LOGGER.log(Level.WARNING, "Error while parsing date", e);
         }
-        buildtime.setHours(defaultScheduleTime.getHours());
-        buildtime.setMinutes(defaultScheduleTime.getMinutes());
-        buildtime.setSeconds(defaultScheduleTime.getSeconds());
+        //buildtime.setHours(defaultScheduleTime.getHours());
+        //buildtime.setMinutes(defaultScheduleTime.getMinutes());
+        buildtime.setSeconds(0);
 
-        if (now.getTime() > buildtime.getTime()) {
+        /*if (now.getTime() > buildtime.getTime()) {
             buildtime.setTime(buildtime.getTime() + ScheduleBuildAction.oneDay);
-        }
+        }*/
 
         return buildtime;
     }
@@ -157,7 +158,9 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
 
     private DateFormat dateFormat() {
         DateFormat df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Stapler.getCurrentRequest().getLocale());
-        df.setTimeZone(new ScheduleBuildGlobalConfiguration().getTimeZoneObject());
+        TimeZone tz = new ScheduleBuildGlobalConfiguration().getTimeZoneObject();
+        df.setTimeZone(tz);
+        LOGGER.log(Level.SEVERE, "{dateFormat} tz:[" + tz + "]");
         return df;
     }
 }
