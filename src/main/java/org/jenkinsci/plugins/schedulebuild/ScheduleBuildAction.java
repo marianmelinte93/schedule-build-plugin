@@ -1,11 +1,13 @@
 package org.jenkinsci.plugins.schedulebuild;
 
-import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.GregorianCalendar;
 import java.util.TimeZone;
 import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import javax.servlet.ServletException;
@@ -18,6 +20,7 @@ import org.kohsuke.stapler.StaplerProxy;
 import org.kohsuke.stapler.StaplerRequest;
 
 import hudson.model.Action;
+import hudson.model.Item;
 import hudson.model.Job;
 import hudson.model.ParametersDefinitionProperty;
 import hudson.model.Descriptor.FormException;
@@ -27,55 +30,52 @@ import net.sf.json.JSONObject;
 
 public class ScheduleBuildAction implements Action, StaplerProxy {
 
-    private static final Logger LOGGER = Logger.getLogger(ScheduleBuildAction.class.getName());
+    private static final Logger logger = Logger.getLogger(ScheduleBuildAction.class.getName());
 
     private final Job<?, ?> target;
-    private final static long securityMargin = 120 * 1000;
-    private final static long oneDay = 24 * 3600 * 1000;
+    private static final long SECURITY_MARGIN = 120 * 1000L;
 
     private long quietperiod;
 
     public ScheduleBuildAction(final Job<?, ?> target) {
         this.target = target;
     }
-
+    
     public Job<?, ?> getOwner() {
         return target;
     }
 
     @Override
     public String getIconFileName() {
-        return target.hasPermission(Job.BUILD) && this.target.isBuildable() ? "/plugin/schedule-build/images/schedule.png" : null;
+        return target.hasPermission(Item.BUILD) && this.target.isBuildable() ? "/plugin/schedule-build/images/schedule.png" : null;
     }
 
     @Override
     public String getDisplayName() {
-        return target.hasPermission(Job.BUILD) && this.target.isBuildable() ? Messages.ScheduleBuildAction_DisplayName() : null;
+        return target.hasPermission(Item.BUILD) && this.target.isBuildable() ? Messages.ScheduleBuildAction_DisplayName() : null;
     }
 
     @Override
     public String getUrlName() {
         return "schedule";
     }
-
+    
     public boolean schedule(StaplerRequest req, JSONObject formData) throws FormException {
         return true;
     }
 
     @Override
     public Object getTarget() {
-        target.checkPermission(Job.BUILD);
+        target.checkPermission(Item.BUILD);
         return this;
     }
 
     public String getIconPath() {
-        Jenkins instance = Jenkins.getInstance();
-        if (instance != null) {
-            String rootUrl = instance.getRootUrl();
+        Jenkins instance = Jenkins.get();
+        String rootUrl = instance.getRootUrl();
 
-            if (rootUrl != null) {
-                return rootUrl + "plugin/schedule-build/";
-            }
+        if (rootUrl != null) {
+            return rootUrl + "plugin/schedule-build/";
         }
         throw new IllegalStateException("couldn't load rootUrl");
     }
@@ -85,26 +85,21 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
     }
 
     public Date getDefaultDateObject() {
-        Date buildtime = new Date(), now = new Date(), defaultScheduleTime = new Date();
-        DateFormat dateFormat = dateFormat();
-        try {
-            now = dateFormat.parse(dateFormat.format(now));
-        } catch (ParseException e) {
-            LOGGER.log(Level.WARNING, "Error while parsing date", e);
-        }
-        //buildtime.setHours(defaultScheduleTime.getHours());
-        //buildtime.setMinutes(defaultScheduleTime.getMinutes());
-        buildtime.setSeconds(0);
-
-        /*if (now.getTime() > buildtime.getTime()) {
-            buildtime.setTime(buildtime.getTime() + ScheduleBuildAction.oneDay);
-        }*/
-
+        Date buildtime = new Date();
+        int defaultDelay = new ScheduleBuildGlobalConfiguration().getDefaultDelay();
+        
+        GregorianCalendar gc = new GregorianCalendar();
+        gc.setTime(buildtime);
+        gc.set(Calendar.SECOND, 0);
+        gc.add(Calendar.MINUTE, defaultDelay);
+		buildtime = gc.getTime();
+        
         return buildtime;
     }
 
     public FormValidation doCheckDate(@QueryParameter String date) {
-        Date ddate, now = new Date();
+        Date ddate;
+        Date now = new Date();
         DateFormat dateFormat = dateFormat();
         try {
             ddate = dateFormat.parse(date);
@@ -113,7 +108,7 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
             return FormValidation.error(Messages.ScheduleBuildAction_ParsingError());
         }
 
-        if (now.getTime() > ddate.getTime() + ScheduleBuildAction.securityMargin) {
+        if (now.getTime() > ddate.getTime() + ScheduleBuildAction.SECURITY_MARGIN) {
             return FormValidation.error(Messages.ScheduleBuildAction_DateInPastError());
         }
 
@@ -124,16 +119,15 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
         return quietperiod / 1000;
     }
 
-    public HttpResponse doNext(StaplerRequest req) throws FormException, ServletException, IOException {
-        // Deprecated function StructureForm.get()
-        // JSONObject param = StructuredForm.get(req);
+    public HttpResponse doNext(StaplerRequest req) throws ServletException {
         JSONObject param = req.getSubmittedForm();
-        Date ddate = getDefaultDateObject(), now = new Date();
+        Date ddate = getDefaultDateObject();
+        Date now = new Date();
         DateFormat dateFormat = dateFormat();
         try {
             now = dateFormat.parse(dateFormat.format(now));
         } catch (ParseException e) {
-            LOGGER.log(Level.WARNING, "Error while parsing date", e);
+            logger.log(Level.WARNING, "Error while parsing date", e);
         }
 
         if (param.containsKey("date")) {
@@ -145,7 +139,7 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
         }
 
         quietperiod = ddate.getTime() - now.getTime();
-        if (quietperiod + ScheduleBuildAction.securityMargin < 0) { // 120 sec security margin
+        if (quietperiod + ScheduleBuildAction.SECURITY_MARGIN < 0) { // 120 sec security margin
             return HttpResponses.redirectTo("error");
         }
         return HttpResponses.forwardToView(this, "redirect");
@@ -153,14 +147,14 @@ public class ScheduleBuildAction implements Action, StaplerProxy {
 
     public boolean isJobParameterized() {
         ParametersDefinitionProperty paramDefinitions = target.getProperty(ParametersDefinitionProperty.class);
-        return paramDefinitions != null && paramDefinitions.getParameterDefinitions() != null && paramDefinitions.getParameterDefinitions().size() > 0;
+        return paramDefinitions != null && paramDefinitions.getParameterDefinitions() != null && paramDefinitions.getParameterDefinitions().isEmpty();
     }
 
     private DateFormat dateFormat() {
         DateFormat df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM, Stapler.getCurrentRequest().getLocale());
-        TimeZone tz = new ScheduleBuildGlobalConfiguration().getTimeZoneObject();
+        TimeZone tz = new ScheduleBuildGlobalConfiguration().getUserTimeZoneObject();
         df.setTimeZone(tz);
-        LOGGER.log(Level.SEVERE, "{dateFormat} tz:[" + tz + "]");
+        logger.log(new LogRecord(Level.FINEST, "{dateFormat} tz:[" + tz + "]"));
         return df;
     }
 }

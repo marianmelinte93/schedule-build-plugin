@@ -4,5 +4,8 @@
     <f:entry title="${%TimeZone}" field="timeZone">
       <f:textbox />
     </f:entry>
+    <f:entry title="${%DefaultDelay}" field="defaultDelay">
+      <f:textbox />
+    </f:entry>
   </f:section>
 </j:jelly>
